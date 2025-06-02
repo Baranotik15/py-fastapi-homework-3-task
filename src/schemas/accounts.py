@@ -27,6 +27,7 @@ class UserRegistrationRequestSchema(UserBase):
 
 class UserRegistrationResponseSchema(BaseModel):
     id: int
+    email: EmailStr
 
 
 class UserLoginRequestSchema(UserRegistrationRequestSchema):
@@ -50,3 +51,12 @@ class MessageResponseSchema(BaseModel):
 
 class PasswordResetCompleteRequestSchema(UserRegistrationRequestSchema):
     token: str
+
+
+class RefreshTokenRequestSchema(BaseModel):
+    refresh_token: str
+
+
+class RefreshTokenResponseSchema(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
