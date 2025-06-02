@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import uuid
 from typing import cast
 
 from fastapi import APIRouter, Depends, status, HTTPException
@@ -24,7 +25,7 @@ from schemas.accounts import (
     UserLoginRequestSchema,
     UserLoginResponseSchema,
     UserActivationRequestSchema,
-    MessageResponseSchema
+    MessageResponseSchema, UserBase
 )
 from security.interfaces import JWTAuthManagerInterface
 from security.passwords import hash_password
@@ -211,4 +212,41 @@ async def activate_user(
 
     return MessageResponseSchema(
         message="User account activated successfully."
+    )
+
+
+@router.post("/password-reset/request/")
+async def password_reset(
+        user_data: UserBase,
+        db: AsyncSession = Depends(get_db)
+) -> MessageResponseSchema:
+    
+    query = select(UserModel).where(UserModel.email == user_data.email)
+    result = await db.execute(query)
+    user = result.scalars().first()
+
+    if user and user.is_active:
+        await db.execute(
+            PasswordResetTokenModel.__table__.delete().where(
+                PasswordResetTokenModel.user_id == user.id
+            )
+        )
+
+        token = str(uuid.uuid4())
+        expires_at = datetime.now(
+            timezone.utc
+        ) + timedelta(
+            hours=1
+        )
+        new_token = PasswordResetTokenModel(
+            user_id=user.id,
+            token=token,
+            expires_at=expires_at
+        )
+
+        db.add(new_token)
+        await db.commit()
+
+    return MessageResponseSchema(
+        message="If you are registered, you will receive an email with instructions."
     )
