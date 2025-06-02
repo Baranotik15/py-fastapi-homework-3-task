@@ -46,3 +46,7 @@ class UserActivationRequestSchema(BaseModel):
 
 class MessageResponseSchema(BaseModel):
     message: str
+
+
+class PasswordResetCompleteRequestSchema(UserRegistrationRequestSchema):
+    token: str
