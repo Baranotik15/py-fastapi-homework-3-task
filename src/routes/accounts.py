@@ -22,12 +22,14 @@ from schemas.accounts import (
     UserRegistrationRequestSchema,
     UserRegistrationResponseSchema,
     UserLoginRequestSchema,
-    UserLoginResponseSchema
+    UserLoginResponseSchema,
+    UserActivationRequestSchema,
+    MessageResponseSchema
 )
 from security.interfaces import JWTAuthManagerInterface
 from security.passwords import hash_password
-
-
+from security.token_manager import JWTAuthManager
+from exceptions.security import TokenExpiredError, InvalidTokenError
 router = APIRouter()
 
 
@@ -154,4 +156,59 @@ async def login_user(
     return UserLoginResponseSchema(
         access_token=access_token,
         refresh_token=refresh_token
+    )
+
+
+@router.post("/activate/")
+async def activate_user(
+        user_data: UserActivationRequestSchema,
+        db: AsyncSession = Depends(get_db),
+) -> MessageResponseSchema:
+
+    query = (
+        select(UserModel)
+        .options(joinedload(UserModel.activation_token))
+        .where(UserModel.email == user_data.email)
+    )
+
+    result = await db.execute(query)
+
+    user = result.scalars().first()
+
+    if not user:
+        raise HTTPException(
+            status_code=400,
+            detail="User not found."
+        )
+
+    if user.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="User account is already active."
+        )
+
+    if not user.activation_token or user.activation_token.token != user_data.token:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired activation token."
+        )
+
+    expires_at = user.activation_token.expires_at
+
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired activation token."
+        )
+
+    user.is_active = True
+    
+    await db.delete(user.activation_token)
+    await db.commit()
+
+    return MessageResponseSchema(
+        message="User account activated successfully."
     )
