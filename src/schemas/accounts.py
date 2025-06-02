@@ -27,3 +27,13 @@ class UserRegistrationRequestSchema(UserBase):
 
 class UserRegistrationResponseSchema(BaseModel):
     id: int
+
+
+class UserLoginRequestSchema(UserRegistrationRequestSchema):
+    pass
+
+
+class UserLoginResponseSchema(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"

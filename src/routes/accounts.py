@@ -20,10 +20,13 @@ from database import (
 from exceptions import BaseSecurityError
 from schemas.accounts import (
     UserRegistrationRequestSchema,
-    UserRegistrationResponseSchema
+    UserRegistrationResponseSchema,
+    UserLoginRequestSchema,
+    UserLoginResponseSchema
 )
 from security.interfaces import JWTAuthManagerInterface
 from security.passwords import hash_password
+
 
 router = APIRouter()
 
@@ -93,3 +96,62 @@ async def register(
         )
 
     return new_user
+
+
+@router.post(
+    "/login/",
+    status_code=status.HTTP_201_CREATED
+)
+async def login_user(
+    user_data: UserLoginRequestSchema,
+    db: AsyncSession = Depends(get_db),
+    jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_auth_manager),
+    settings: BaseAppSettings = Depends(get_settings)
+) -> UserLoginResponseSchema:
+
+    user = await db.scalar(
+        select(
+            UserModel
+        ).where(
+            UserModel.email == user_data.email
+        )
+    )
+
+    if not user or not user.verify_password(user_data.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password."
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is not activated."
+        )
+
+    access_token = jwt_manager.create_access_token(
+        {"user_id": user.id}
+    )
+    refresh_token = jwt_manager.create_refresh_token(
+        {"user_id": user.id}
+    )
+
+    try:
+        token_obj = RefreshTokenModel.create(
+            user_id=user.id,
+            token=refresh_token,
+            days_valid=settings.LOGIN_TIME_DAYS
+        )
+        db.add(token_obj)
+        await db.commit()
+
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing the request."
+        )
+
+    return UserLoginResponseSchema(
+        access_token=access_token,
+        refresh_token=refresh_token
+    )
