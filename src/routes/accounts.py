@@ -102,7 +102,10 @@ async def register(
             detail="An error occurred during user creation."
         )
 
-    return new_user
+    return UserRegistrationResponseSchema(
+        id=new_user.id,
+        email=new_user.email
+    )
 
 
 @router.post(
